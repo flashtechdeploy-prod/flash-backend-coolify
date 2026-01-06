@@ -3,20 +3,19 @@ providers = ["python"]
 
 [variables]
 NIXPACKS_PYTHON_VERSION = "3.11"
-PIP_NO_CACHE_DIR = "1"
 
 [phases.setup]
-nixPkgs = ["python311", "postgresql", "gcc"]
-aptPkgs = ["libpq-dev", "build-essential"]
+nixPkgs = ["python311", "python311Packages.pip", "postgresql"]
+aptPkgs = ["libpq-dev"]
 
 [phases.install]
 cmds = [
-    "pip install --upgrade pip setuptools wheel",
-    "pip install -r requirements.txt"
+    "python -m pip install --upgrade pip setuptools wheel",
+    "python -m pip install -r requirements.txt"
 ]
 
 [phases.build]
 cmds = ["mkdir -p uploads"]
 
 [start]
-cmd = "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"
+cmd = "python -m uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"
