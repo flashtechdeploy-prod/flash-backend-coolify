@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# Virtual Environment
+.venv/
+venv/
+env/
+ENV/
+
+# Environment
+.env
+.env.local
+*.env
+!.env.example
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+*.backup
+
+# Logs
+*.log
+*.txt
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Test files
+test_*.py
+check_*.py
+debug_*.py
+fix_*.py
+import_*.py
+verify_*.py
