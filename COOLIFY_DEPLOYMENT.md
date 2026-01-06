@@ -65,6 +65,7 @@ PORT=8000
 ```
 
 **Important Notes:**
+
 - Replace `YOUR_PASSWORD` with your PostgreSQL password
 - Replace `postgres-service` with your actual PostgreSQL service name in Coolify
 - Generate a secure `SECRET_KEY` (32+ characters)
@@ -73,7 +74,7 @@ PORT=8000
 ### 5. Configure Networking
 
 1. **Port**: Coolify will automatically expose port `8000`
-2. **Domain**: 
+2. **Domain**:
    - Click **"Add Domain"**
    - Enter your domain (e.g., `api.yourdomain.com`)
    - Enable **"Generate SSL Certificate"** for HTTPS
@@ -97,6 +98,7 @@ https://your-api-domain.com/docs
 ```
 
 Expected response:
+
 ```json
 {
   "message": "Welcome to Flash ERP",
@@ -110,22 +112,28 @@ Expected response:
 The repository includes `nixpacks.toml` which tells Coolify how to build and run the app:
 
 ```toml
+# Nixpacks configuration for Coolify deployment
+providers = ["python"]
+
+[variables]
+NIXPACKS_PYTHON_VERSION = "3.11"
+PIP_NO_CACHE_DIR = "1"
+
 [phases.setup]
-nixPkgs = ["python311", "postgresql"]
+nixPkgs = ["python311", "postgresql", "gcc"]
+aptPkgs = ["libpq-dev", "build-essential"]
 
 [phases.install]
 cmds = [
-    "pip install --upgrade pip",
+    "pip install --upgrade pip setuptools wheel",
     "pip install -r requirements.txt"
 ]
 
 [phases.build]
-cmds = [
-    "mkdir -p uploads"
-]
+cmds = ["mkdir -p uploads"]
 
 [start]
-cmd = "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+cmd = "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"
 ```
 
 ## Troubleshooting
@@ -141,7 +149,8 @@ cmd = "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
 ### Database Connection Fails
 
 **Issue**: Cannot connect to PostgreSQL
-**Solution**: 
+**Solution**:
+
 1. Verify `DATABASE_URL` format
 2. Check PostgreSQL service is running in Coolify
 3. Ensure network connectivity between services
@@ -158,7 +167,8 @@ cmd = "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
 ### SSL/HTTPS Issues
 
 **Issue**: SSL certificate not working
-**Solution**: 
+**Solution**:
+
 1. Ensure domain DNS points to Coolify server
 2. Wait for certificate generation (can take a few minutes)
 3. Check Coolify logs for certificate errors
@@ -179,6 +189,7 @@ Visit: `https://your-api-domain.com/docs`
 ### Monitor Logs
 
 In Coolify dashboard:
+
 1. Go to your application
 2. Click **"Logs"** tab
 3. Monitor real-time application logs
@@ -186,6 +197,7 @@ In Coolify dashboard:
 ### Update Deployment
 
 To deploy updates:
+
 1. Push changes to GitHub
 2. In Coolify, click **"Redeploy"**
 3. Or enable **"Auto Deploy"** for automatic deployments on git push
@@ -197,6 +209,7 @@ If you need to run Alembic migrations:
 1. In Coolify, go to your application
 2. Click **"Terminal"** or **"Execute Command"**
 3. Run:
+
 ```bash
 alembic upgrade head
 ```
@@ -204,6 +217,7 @@ alembic upgrade head
 ## Scaling
 
 To scale your application:
+
 1. Go to application settings in Coolify
 2. Adjust **"Replicas"** count
 3. Configure load balancing if needed
@@ -213,6 +227,7 @@ To scale your application:
 ### Database Backup
 
 In Coolify PostgreSQL service:
+
 1. Go to database settings
 2. Enable **"Automatic Backups"**
 3. Set backup schedule
@@ -232,17 +247,17 @@ pg_dump $DATABASE_URL > backup.sql
 
 ## Environment Variables Reference
 
-| Variable | Required | Description | Example |
-|----------|----------|-------------|---------|
-| DATABASE_URL | Yes | PostgreSQL connection string | `postgresql://user:pass@host:5432/db` |
-| SECRET_KEY | Yes | JWT secret key (32+ chars) | `your-secret-key-here` |
-| ALGORITHM | Yes | JWT algorithm | `HS256` |
-| ACCESS_TOKEN_EXPIRE_MINUTES | Yes | Token expiration time | `30` |
-| ALLOWED_ORIGINS | Yes | CORS allowed origins | `https://app.com,http://localhost:3000` |
-| APP_NAME | No | Application name | `Flash ERP` |
-| APP_VERSION | No | Application version | `1.0.0` |
-| DEBUG | No | Debug mode | `False` |
-| PORT | Auto | Application port (set by Coolify) | `8000` |
+| Variable                    | Required | Description                       | Example                                 |
+| --------------------------- | -------- | --------------------------------- | --------------------------------------- |
+| DATABASE_URL                | Yes      | PostgreSQL connection string      | `postgresql://user:pass@host:5432/db`   |
+| SECRET_KEY                  | Yes      | JWT secret key (32+ chars)        | `your-secret-key-here`                  |
+| ALGORITHM                   | Yes      | JWT algorithm                     | `HS256`                                 |
+| ACCESS_TOKEN_EXPIRE_MINUTES | Yes      | Token expiration time             | `30`                                    |
+| ALLOWED_ORIGINS             | Yes      | CORS allowed origins              | `https://app.com,http://localhost:3000` |
+| APP_NAME                    | No       | Application name                  | `Flash ERP`                             |
+| APP_VERSION                 | No       | Application version               | `1.0.0`                                 |
+| DEBUG                       | No       | Debug mode                        | `False`                                 |
+| PORT                        | Auto     | Application port (set by Coolify) | `8000`                                  |
 
 ---
 

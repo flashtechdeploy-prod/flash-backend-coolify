@@ -35,8 +35,11 @@ uploads/
 
 # Logs
 *.log
-*.txt
 server_log*.txt
+
+# Keep important txt files
+!requirements.txt
+!runtime.txt
 
 # IDE
 .vscode/
