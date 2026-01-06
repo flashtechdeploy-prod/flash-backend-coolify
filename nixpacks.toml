@@ -1,4 +1,5 @@
-# Let Nixpacks auto-detect Python and handle pip
+providers = ["python"]
+
 [variables]
 NIXPACKS_PYTHON_VERSION = "3.11"
 
