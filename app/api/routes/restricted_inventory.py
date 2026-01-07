@@ -508,6 +508,8 @@ async def upload_image(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ) -> RestrictedItemImageOut:
+    from app.core.upload_helper import upload_file_with_prefix
+    
     item = db.query(RestrictedItem).filter(RestrictedItem.item_code == item_code).first()
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
@@ -516,21 +518,22 @@ async def upload_image(
     if not ct.startswith("image/"):
         raise HTTPException(status_code=400, detail="Only image files are allowed")
 
-    ext = os.path.splitext(file.filename or "")[-1]
-    safe_name = f"{item_code}_{uuid.uuid4().hex}{ext}"
-    dest = os.path.join(_upload_dir(), safe_name)
+    content = await file.read()
 
-    with open(dest, "wb") as f:
-        while True:
-            chunk = await file.read(1024 * 1024)
-            if not chunk:
-                break
-            f.write(chunk)
+    # Upload using B2 or local
+    url, new_filename, storage = await upload_file_with_prefix(
+        content=content,
+        original_filename=file.filename or "",
+        prefix=item_code,
+        content_type=ct,
+        folder="restricted-inventory/images",
+        local_subdir="restricted-inventory/images",
+    )
 
     img = RestrictedItemImage(
         item_code=item_code,
-        filename=file.filename or safe_name,
-        path=dest,
+        filename=file.filename or new_filename,
+        path=url,
         mime_type=ct,
     )
 
@@ -542,7 +545,7 @@ async def upload_image(
         id=img.id,
         item_code=img.item_code,
         filename=img.filename,
-        url=_public_url(img.path),
+        url=url,
         mime_type=img.mime_type,
         created_at=img.created_at,
         updated_at=img.updated_at,

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.upload_helper import upload_file_with_prefix
 from app.models.employee import Employee
 from app.models.employee_document import EmployeeDocument
 from app.schemas.employee_document import EmployeeDocumentOut
@@ -41,13 +42,15 @@ async def list_employee_documents(employee_db_id: int, db: Session = Depends(get
 
     out: List[EmployeeDocumentOut] = []
     for d in docs:
+        # Handle both B2 URLs (https://...) and local paths
+        url = d.path if d.path.startswith("http") else _public_url(employee_db_id, d.path)
         out.append(
             EmployeeDocumentOut(
                 id=d.id,
                 employee_db_id=d.employee_db_id,
                 name=d.name,
                 filename=d.filename,
-                url=_public_url(employee_db_id, d.path),
+                url=url,
                 mime_type=d.mime_type,
                 created_at=d.created_at,
                 updated_at=d.updated_at,
@@ -71,23 +74,23 @@ async def upload_employee_document(
         raise HTTPException(status_code=400, detail="Document name is required")
 
     ct = file.content_type or "application/octet-stream"
+    content = await file.read()
 
-    ext = os.path.splitext(file.filename or "")[-1]
-    safe_name = f"emp_{employee_db_id}_{uuid.uuid4().hex}{ext}"
-    dest = os.path.join(_upload_dir(employee_db_id), safe_name)
-
-    with open(dest, "wb") as f:
-        while True:
-            chunk = await file.read(1024 * 1024)
-            if not chunk:
-                break
-            f.write(chunk)
+    # Upload using B2 or local
+    url, new_filename, storage = await upload_file_with_prefix(
+        content=content,
+        original_filename=file.filename or "",
+        prefix=f"emp_{employee_db_id}",
+        content_type=ct,
+        folder=f"employees/{employee_db_id}",
+        local_subdir=f"employees/{employee_db_id}",
+    )
 
     doc = EmployeeDocument(
         employee_db_id=employee_db_id,
         name=name.strip(),
-        filename=file.filename or safe_name,
-        path=dest,
+        filename=file.filename or new_filename,
+        path=url,  # Store the full URL (B2) or local path
         mime_type=ct,
     )
 
@@ -100,7 +103,7 @@ async def upload_employee_document(
         employee_db_id=doc.employee_db_id,
         name=doc.name,
         filename=doc.filename,
-        url=_public_url(employee_db_id, doc.path),
+        url=url,
         mime_type=doc.mime_type,
         created_at=doc.created_at,
         updated_at=doc.updated_at,
@@ -118,8 +121,9 @@ async def delete_employee_document(employee_db_id: int, doc_id: int, db: Session
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
 
+    # Only delete local files (B2 files start with http)
     try:
-        if doc.path and os.path.exists(doc.path):
+        if doc.path and not doc.path.startswith("http") and os.path.exists(doc.path):
             os.remove(doc.path)
     except Exception:
         pass

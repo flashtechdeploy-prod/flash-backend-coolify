@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.upload_helper import upload_file_with_prefix
 from app.models.vehicle import Vehicle
 from app.models.vehicle_image import VehicleImage
 from app.schemas.vehicle_image import VehicleImageOut
@@ -41,12 +42,13 @@ async def list_vehicle_images(vehicle_id: str, db: Session = Depends(get_db)) ->
 
     out: List[VehicleImageOut] = []
     for img in imgs:
+        url = img.path if img.path.startswith("http") else _public_url(img.path)
         out.append(
             VehicleImageOut(
                 id=img.id,
                 vehicle_id=img.vehicle_id,
                 filename=img.filename,
-                url=_public_url(img.path),
+                url=url,
                 mime_type=img.mime_type,
                 created_at=img.created_at,
                 updated_at=img.updated_at,
@@ -69,21 +71,22 @@ async def upload_vehicle_image(
     if not ct.startswith("image/"):
         raise HTTPException(status_code=400, detail="Only image files are allowed")
 
-    ext = os.path.splitext(file.filename or "")[-1]
-    safe_name = f"{vehicle_id}_{uuid.uuid4().hex}{ext}"
-    dest = os.path.join(_upload_dir(), safe_name)
+    content = await file.read()
 
-    with open(dest, "wb") as f:
-        while True:
-            chunk = await file.read(1024 * 1024)
-            if not chunk:
-                break
-            f.write(chunk)
+    # Upload using B2 or local
+    url, new_filename, storage = await upload_file_with_prefix(
+        content=content,
+        original_filename=file.filename or "",
+        prefix=vehicle_id,
+        content_type=ct,
+        folder="vehicles/images",
+        local_subdir="vehicles/images",
+    )
 
     img = VehicleImage(
         vehicle_id=vehicle_id,
-        filename=file.filename or safe_name,
-        path=dest,
+        filename=file.filename or new_filename,
+        path=url,
         mime_type=ct,
     )
 
@@ -95,7 +98,7 @@ async def upload_vehicle_image(
         id=img.id,
         vehicle_id=img.vehicle_id,
         filename=img.filename,
-        url=_public_url(img.path),
+        url=url,
         mime_type=img.mime_type,
         created_at=img.created_at,
         updated_at=img.updated_at,
@@ -114,7 +117,7 @@ async def delete_vehicle_image(vehicle_id: str, image_id: int, db: Session = Dep
         raise HTTPException(status_code=404, detail="Image not found")
 
     try:
-        if img.path and os.path.exists(img.path):
+        if img.path and not img.path.startswith("http") and os.path.exists(img.path):
             os.remove(img.path)
     except Exception:
         pass

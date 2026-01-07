@@ -996,26 +996,30 @@ async def upload_client_document(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ) -> ClientDocumentOut:
+    from app.core.upload_helper import upload_file_with_prefix
+    
     _get_client(db, client_id)
 
     if not document_type or not str(document_type).strip():
         raise HTTPException(status_code=400, detail="Document type is required")
 
-    ext = os.path.splitext(file.filename or "")[-1]
-    safe_name = f"client_{client_id}_{uuid.uuid4().hex}{ext}"
-    dest = os.path.join(_client_upload_dir(client_id), safe_name)
+    content = await file.read()
+    ct = file.content_type or "application/octet-stream"
 
-    with open(dest, "wb") as f:
-        while True:
-            chunk = await file.read(1024 * 1024)
-            if not chunk:
-                break
-            f.write(chunk)
+    # Upload using B2 or local
+    url, new_filename, storage = await upload_file_with_prefix(
+        content=content,
+        original_filename=file.filename or "",
+        prefix=f"client_{client_id}",
+        content_type=ct,
+        folder=f"clients/{client_id}",
+        local_subdir=f"clients/{client_id}",
+    )
 
     row = ClientDocument(
         client_id=client_id,
         document_type=str(document_type).strip(),
-        file_url=_client_public_url(client_id, dest),
+        file_url=url,
         expiry_date=expiry_date,
         remarks=remarks,
     )

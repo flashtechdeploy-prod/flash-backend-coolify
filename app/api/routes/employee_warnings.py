@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.upload_helper import upload_file_with_prefix
 from app.models.employee import Employee
 from app.models.employee_warning import EmployeeWarning
 from app.models.employee_warning_document import EmployeeWarningDocument
@@ -91,7 +92,7 @@ async def delete_employee_warning(employee_db_id: int, warning_id: int, db: Sess
     docs = db.query(EmployeeWarningDocument).filter(EmployeeWarningDocument.warning_id == warning_id).all()
     for d in docs:
         try:
-            if d.path and os.path.exists(d.path):
+            if d.path and not d.path.startswith("http") and os.path.exists(d.path):
                 os.remove(d.path)
         except Exception:
             pass
@@ -117,12 +118,13 @@ async def list_warning_documents(warning_id: int, db: Session = Depends(get_db))
 
     out: List[EmployeeWarningDocumentOut] = []
     for d in docs:
+        url = d.path if d.path.startswith("http") else _public_url(w.employee_db_id, warning_id, d.path)
         out.append(
             EmployeeWarningDocumentOut(
                 id=d.id,
                 warning_id=d.warning_id,
                 filename=d.filename,
-                url=_public_url(w.employee_db_id, warning_id, d.path),
+                url=url,
                 mime_type=d.mime_type,
                 created_at=d.created_at,
                 updated_at=d.updated_at,
@@ -142,22 +144,22 @@ async def upload_warning_document(
         raise HTTPException(status_code=404, detail="Warning not found")
 
     ct = file.content_type or "application/octet-stream"
+    content = await file.read()
 
-    ext = os.path.splitext(file.filename or "")[-1]
-    safe_name = f"warn_{warning_id}_{uuid.uuid4().hex}{ext}"
-    dest = os.path.join(_warning_upload_dir(w.employee_db_id, warning_id), safe_name)
-
-    with open(dest, "wb") as f:
-        while True:
-            chunk = await file.read(1024 * 1024)
-            if not chunk:
-                break
-            f.write(chunk)
+    # Upload using B2 or local
+    url, new_filename, storage = await upload_file_with_prefix(
+        content=content,
+        original_filename=file.filename or "",
+        prefix=f"warn_{warning_id}",
+        content_type=ct,
+        folder=f"employees/{w.employee_db_id}/warnings/{warning_id}",
+        local_subdir=f"employees/{w.employee_db_id}/warnings/{warning_id}",
+    )
 
     doc = EmployeeWarningDocument(
         warning_id=warning_id,
-        filename=file.filename or safe_name,
-        path=dest,
+        filename=file.filename or new_filename,
+        path=url,
         mime_type=ct,
     )
 
@@ -169,7 +171,7 @@ async def upload_warning_document(
         id=doc.id,
         warning_id=doc.warning_id,
         filename=doc.filename,
-        url=_public_url(w.employee_db_id, warning_id, doc.path),
+        url=url,
         mime_type=doc.mime_type,
         created_at=doc.created_at,
         updated_at=doc.updated_at,
@@ -188,7 +190,7 @@ async def delete_warning_document(warning_id: int, doc_id: int, db: Session = De
         raise HTTPException(status_code=404, detail="Document not found")
 
     try:
-        if doc.path and os.path.exists(doc.path):
+        if doc.path and not doc.path.startswith("http") and os.path.exists(doc.path):
             os.remove(doc.path)
     except Exception:
         pass

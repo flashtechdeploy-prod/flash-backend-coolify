@@ -119,6 +119,8 @@ async def upload_item_image(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ) -> GeneralItemOut:
+    from app.core.upload_helper import upload_file_with_prefix
+    
     item = db.query(GeneralItem).filter(GeneralItem.item_code == item_code).first()
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
@@ -127,18 +129,19 @@ async def upload_item_image(
     if not ct.startswith("image/"):
         raise HTTPException(status_code=400, detail="Only image files are allowed")
 
-    ext = os.path.splitext(file.filename or "")[-1]
-    safe_name = f"{item_code}_{uuid.uuid4().hex}{ext}"
-    dest = os.path.join(_upload_dir(), safe_name)
+    content = await file.read()
 
-    with open(dest, "wb") as f:
-        while True:
-            chunk = await file.read(1024 * 1024)
-            if not chunk:
-                break
-            f.write(chunk)
+    # Upload using B2 or local
+    url, new_filename, storage = await upload_file_with_prefix(
+        content=content,
+        original_filename=file.filename or "",
+        prefix=item_code,
+        content_type=ct,
+        folder="general-items/images",
+        local_subdir="general-items/images",
+    )
 
-    item.image_url = _public_url(dest)
+    item.image_url = url
     db.commit()
     db.refresh(item)
     return item

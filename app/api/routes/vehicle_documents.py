@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.upload_helper import upload_file_with_prefix
 from app.models.vehicle import Vehicle
 from app.models.vehicle_document import VehicleDocument
 from app.schemas.vehicle_document import VehicleDocumentOut
@@ -41,13 +42,14 @@ async def list_vehicle_documents(vehicle_id: str, db: Session = Depends(get_db))
 
     out: List[VehicleDocumentOut] = []
     for d in docs:
+        url = d.path if d.path.startswith("http") else _public_url(d.path)
         out.append(
             VehicleDocumentOut(
                 id=d.id,
                 vehicle_id=d.vehicle_id,
                 name=d.name,
                 filename=d.filename,
-                url=_public_url(d.path),
+                url=url,
                 mime_type=d.mime_type,
                 created_at=d.created_at,
                 updated_at=d.updated_at,
@@ -75,22 +77,23 @@ async def upload_vehicle_document(
     if not (ct.startswith("image/") or ct == "application/pdf"):
         raise HTTPException(status_code=400, detail="Only images or PDF are allowed")
 
-    ext = os.path.splitext(file.filename or "")[-1]
-    safe_name = f"{vehicle_id}_{uuid.uuid4().hex}{ext}"
-    dest = os.path.join(_upload_dir(), safe_name)
+    content = await file.read()
 
-    with open(dest, "wb") as f:
-        while True:
-            chunk = await file.read(1024 * 1024)
-            if not chunk:
-                break
-            f.write(chunk)
+    # Upload using B2 or local
+    url, new_filename, storage = await upload_file_with_prefix(
+        content=content,
+        original_filename=file.filename or "",
+        prefix=vehicle_id,
+        content_type=ct,
+        folder="vehicles",
+        local_subdir="vehicles",
+    )
 
     doc = VehicleDocument(
         vehicle_id=vehicle_id,
         name=name.strip(),
-        filename=file.filename or safe_name,
-        path=dest,
+        filename=file.filename or new_filename,
+        path=url,
         mime_type=ct,
     )
 
@@ -103,7 +106,7 @@ async def upload_vehicle_document(
         vehicle_id=doc.vehicle_id,
         name=doc.name,
         filename=doc.filename,
-        url=_public_url(doc.path),
+        url=url,
         mime_type=doc.mime_type,
         created_at=doc.created_at,
         updated_at=doc.updated_at,
@@ -122,7 +125,7 @@ async def delete_vehicle_document(vehicle_id: str, doc_id: int, db: Session = De
         raise HTTPException(status_code=404, detail="Document not found")
 
     try:
-        if doc.path and os.path.exists(doc.path):
+        if doc.path and not doc.path.startswith("http") and os.path.exists(doc.path):
             os.remove(doc.path)
     except Exception:
         pass
