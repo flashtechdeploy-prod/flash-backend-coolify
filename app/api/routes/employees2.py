@@ -566,6 +566,8 @@ async def upload_employee_file(
     _user=Depends(require_permission("employees:update")),
 ):
     """Upload a file for an employee (avatar, cnic, domicile, etc.)."""
+    from app.core.storage import b2_storage
+    
     # Validate field type
     valid_fields = [
         "avatar", "cnic", "domicile", "sho_verified", 
@@ -593,6 +595,9 @@ async def upload_employee_file(
         if not file.filename:
             raise HTTPException(status_code=400, detail="No file provided")
         
+        # Read file content
+        content = await file.read()
+        
         # Get file extension
         file_ext = os.path.splitext(file.filename)[1].lower()
         
@@ -601,11 +606,39 @@ async def upload_employee_file(
         unique_id = str(uuid.uuid4())[:8]
         new_filename = f"emp{employee_id}_{field_type}_{timestamp}_{unique_id}{file_ext}"
         
-        # Save file
+        # Try B2 cloud storage first
+        if b2_storage.is_enabled():
+            success, url, error = await b2_storage.upload_file(
+                file_content=content,
+                filename=new_filename,
+                content_type=file.content_type or "application/octet-stream",
+                folder="employees2"
+            )
+            
+            if success:
+                # Update employee record with B2 URL
+                field_name = f"{field_type}_attachment" if field_type != "avatar" else "avatar_url"
+                setattr(employee, field_name, url)
+                db.commit()
+                db.refresh(employee)
+                
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "success": True,
+                        "url": url,
+                        "field": field_name,
+                        "filename": new_filename,
+                        "storage": "b2"
+                    }
+                )
+            else:
+                print(f"[Upload] B2 upload failed: {error}, falling back to local storage")
+        
+        # Fallback to local storage
         file_path = UPLOAD_DIR / new_filename
         
         with open(file_path, "wb") as buffer:
-            content = await file.read()
             buffer.write(content)
         
         # Update employee record
@@ -622,9 +655,12 @@ async def upload_employee_file(
                 "url": file_url,
                 "field": field_name,
                 "filename": new_filename,
+                "storage": "local"
             }
         )
     
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"File upload failed: {str(e)}")
 
