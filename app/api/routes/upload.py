@@ -86,6 +86,16 @@ async def upload_file(file: UploadFile = File(...)):
 @router.get("/storage/status")
 async def storage_status():
     """Check the status of cloud storage configuration."""
+    # Debug: Show raw settings values
+    debug_info = {
+        "B2_ENABLED_raw": settings.B2_ENABLED,
+        "B2_KEY_ID_set": bool(settings.B2_KEY_ID),
+        "B2_APPLICATION_KEY_set": bool(settings.B2_APPLICATION_KEY),
+        "B2_BUCKET_NAME": settings.B2_BUCKET_NAME or "(not set)",
+        "B2_ENDPOINT_URL": settings.B2_ENDPOINT_URL or "(not set)",
+        "B2_REGION": settings.B2_REGION or "(not set)",
+    }
+    
     if b2_storage.is_enabled():
         success, message = b2_storage.test_connection()
         return {
@@ -94,6 +104,7 @@ async def storage_status():
             "message": message,
             "bucket": settings.B2_BUCKET_NAME,
             "endpoint": settings.B2_ENDPOINT_URL,
+            "debug": debug_info,
         }
     else:
         return {
@@ -101,6 +112,7 @@ async def storage_status():
             "b2_connected": False,
             "message": "B2 storage is not enabled. Using local storage.",
             "local_path": str(UPLOAD_DIR),
+            "debug": debug_info,
         }
 
 
