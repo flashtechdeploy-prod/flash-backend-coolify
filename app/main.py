@@ -838,19 +838,12 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
-    allow_credentials=True,
+    allow_origins=settings.allowed_origins_list,
+    allow_credentials="*" not in settings.allowed_origins_list,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"],
 )
-
-
-@app.middleware("http")
-async def add_cors_origin_header(request: Request, call_next):
-    response = await call_next(request)
-    response.headers["Access-Control-Allow-Origin"] = "http://localhost:3000"
-    return response
 
 
 @app.exception_handler(Exception)
