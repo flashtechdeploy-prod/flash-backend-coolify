@@ -8,7 +8,7 @@ class PayrollSheetEntry(Base):
     __tablename__ = "payroll_sheet_entries"
 
     id = Column(Integer, primary_key=True, index=True)
-    employee_db_id = Column(Integer, ForeignKey("employees.id"), index=True, nullable=False)
+    employee_db_id = Column(Integer, ForeignKey("employees2.id"), index=True, nullable=False)
 
     from_date = Column(Date, index=True, nullable=False)
     to_date = Column(Date, index=True, nullable=False)

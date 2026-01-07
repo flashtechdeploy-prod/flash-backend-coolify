@@ -763,6 +763,33 @@ def _ensure_payroll_sheet_entry_columns_exist() -> None:
 _ensure_payroll_sheet_entry_columns_exist()
 
 
+def _ensure_payroll_sheet_entry_employee_fk() -> None:
+    """Fix payroll_sheet_entries foreign key to reference employees2 instead of employees."""
+    if engine.dialect.name != "postgresql":
+        return
+
+    with engine.begin() as conn:
+        try:
+            conn.execute(
+                text(
+                    "ALTER TABLE payroll_sheet_entries "
+                    "DROP CONSTRAINT IF EXISTS payroll_sheet_entries_employee_db_id_fkey"
+                )
+            )
+            conn.execute(
+                text(
+                    "ALTER TABLE payroll_sheet_entries "
+                    "ADD CONSTRAINT payroll_sheet_entries_employee_db_id_fkey "
+                    "FOREIGN KEY (employee_db_id) REFERENCES employees2(id)"
+                )
+            )
+        except Exception:
+            pass
+
+
+_ensure_payroll_sheet_entry_employee_fk()
+
+
 def _ensure_client_site_guard_allocation_columns_exist() -> None:
     cols = {
         "site_id": "INTEGER",
